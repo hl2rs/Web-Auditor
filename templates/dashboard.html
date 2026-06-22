@@ -1,0 +1,587 @@
+{% extends "base.html" %}
+{% block title %}Compliance Report &middot; SiteAuditor{% endblock %}
+
+{% block content %}
+<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6"
+         data-scan-id="{{ scan_id }}">
+
+  <!-- ===== Header: target + status + actions ===== -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div class="min-w-0">
+      <div class="flex items-center gap-3">
+        <span id="status-badge"
+              class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-300">
+          <span id="status-dot" class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+          <span id="status-text">Connecting…</span>
+        </span>
+        <span id="elapsed" class="text-xs text-slate-500"></span>
+      </div>
+      <h1 class="mt-2 text-2xl font-bold text-white truncate">Compliance Risk Audit</h1>
+      <p id="target-url" class="text-sm text-slate-400 truncate">{{ start_url }}</p>
+    </div>
+
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <button id="cancel-btn"
+              class="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        Cancel
+      </button>
+      <a id="export-btn" href="/api/scan/{{ scan_id }}/export"
+         class="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+        JSON
+      </a>
+      <a id="pdf-btn" href="/api/scan/{{ scan_id }}/report.pdf"
+         class="inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        PDF Report
+      </a>
+    </div>
+  </div>
+
+  <!-- ===== Risk Index + Progress ===== -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Legal & Compliance Risk Index -->
+    <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 flex flex-col items-center text-center">
+      <h2 class="text-sm font-semibold text-slate-300 self-start">Legal &amp; Compliance Risk Index</h2>
+      <div class="relative my-3" style="width:160px;height:160px">
+        <svg width="160" height="160" viewBox="0 0 120 120" class="-rotate-90">
+          <circle cx="60" cy="60" r="52" fill="none" stroke="#1e293b" stroke-width="12"/>
+          <circle id="risk-arc" cx="60" cy="60" r="52" fill="none" stroke="#16a34a"
+                  stroke-width="12" stroke-linecap="round"
+                  stroke-dasharray="326.7" stroke-dashoffset="326.7"
+                  style="transition: stroke-dashoffset .6s ease, stroke .6s ease"/>
+        </svg>
+        <div class="absolute inset-0 flex flex-col items-center justify-center">
+          <span id="risk-score" class="text-4xl font-extrabold text-white leading-none">0</span>
+          <span id="risk-grade" class="mt-1 text-xs font-semibold text-slate-400">Grade A</span>
+        </div>
+      </div>
+      <span id="risk-level"
+            class="inline-flex rounded-full px-3 py-1 text-xs font-semibold bg-emerald-500/15 text-emerald-300">Low Risk</span>
+      <p id="risk-headline" class="mt-3 text-xs text-slate-500 leading-relaxed"></p>
+    </div>
+
+    <!-- Progress + live stats (spans 2) -->
+    <div class="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-900/50 p-5 sm:p-6">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2 text-sm text-slate-300">
+          <svg id="phase-spinner" class="h-4 w-4 animate-spin text-brand-400" viewBox="0 0 24 24" fill="none">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+          </svg>
+          <span id="phase-label" class="font-medium">Preparing…</span>
+        </div>
+        <span id="progress-pct" class="text-sm font-semibold text-brand-400">0%</span>
+      </div>
+      <div class="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden">
+        <div id="progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-brand-500 to-emerald-400 transition-all duration-500"></div>
+      </div>
+      <p id="current-url" class="mt-3 text-xs text-slate-500 truncate font-mono"></p>
+
+      <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-4 py-3">
+          <p class="text-xs text-slate-500">Pages scanned</p>
+          <p id="stat-scanned" class="text-xl font-bold text-white">0</p>
+        </div>
+        <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-4 py-3">
+          <p class="text-xs text-slate-500">In queue</p>
+          <p id="stat-queued" class="text-xl font-bold text-white">0</p>
+        </div>
+        <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-4 py-3">
+          <p class="text-xs text-slate-500">Links checked</p>
+          <p id="stat-links" class="text-xl font-bold text-white">0</p>
+        </div>
+        <div class="rounded-xl bg-slate-950/60 border border-slate-800 px-4 py-3">
+          <p class="text-xs text-slate-500">Issues found</p>
+          <p id="stat-issues" class="text-xl font-bold text-white">0</p>
+        </div>
+      </div>
+
+      <!-- Top regulations implicated -->
+      <div class="mt-4">
+        <p class="text-xs text-slate-500 mb-2">Regulations implicated</p>
+        <div id="reg-chips" class="flex flex-wrap gap-2">
+          <span class="text-xs text-slate-600">None yet.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Severity summary cards ===== -->
+  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+    <button data-sev="Critical"
+            class="sev-card text-left rounded-2xl border border-rose-500/30 bg-rose-500/5 p-5 hover:bg-rose-500/10 transition">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-rose-300">Critical</span>
+        <span class="h-2.5 w-2.5 rounded-full bg-rose-500"></span>
+      </div>
+      <p id="count-critical" class="mt-2 text-3xl font-extrabold text-white">0</p>
+    </button>
+    <button data-sev="Warning"
+            class="sev-card text-left rounded-2xl border border-amber-500/30 bg-amber-500/5 p-5 hover:bg-amber-500/10 transition">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-amber-300">Warning</span>
+        <span class="h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+      </div>
+      <p id="count-warning" class="mt-2 text-3xl font-extrabold text-white">0</p>
+    </button>
+    <button data-sev="Info"
+            class="sev-card text-left rounded-2xl border border-sky-500/30 bg-sky-500/5 p-5 hover:bg-sky-500/10 transition">
+      <div class="flex items-center justify-between">
+        <span class="text-sm font-medium text-sky-300">Info</span>
+        <span class="h-2.5 w-2.5 rounded-full bg-sky-500"></span>
+      </div>
+      <p id="count-info" class="mt-2 text-3xl font-extrabold text-white">0</p>
+    </button>
+  </div>
+
+  <!-- ===== Filters ===== -->
+  <div class="rounded-2xl border border-slate-800 bg-slate-900/50 p-4 flex flex-col lg:flex-row lg:items-center gap-3">
+    <div class="relative flex-1">
+      <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-500">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      </span>
+      <input id="search" type="text" placeholder="Search issues, laws, URLs…"
+             class="w-full rounded-xl bg-slate-950/70 border border-slate-700 pl-10 pr-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 transition" />
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <select id="filter-severity"
+              class="rounded-xl bg-slate-950/70 border border-slate-700 px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="all">All severities</option>
+        <option value="Critical">Critical</option>
+        <option value="Warning">Warning</option>
+        <option value="Info">Info</option>
+      </select>
+      <select id="filter-category"
+              class="rounded-xl bg-slate-950/70 border border-slate-700 px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="all">All categories</option>
+        <option value="Security">Security</option>
+        <option value="Privacy">Privacy</option>
+        <option value="Accessibility">Accessibility</option>
+        <option value="SEO">SEO</option>
+        <option value="Dead Links">Dead Links</option>
+        <option value="Content">Content</option>
+        <option value="Bugs">Bugs</option>
+      </select>
+      <button id="clear-filters"
+              class="rounded-xl border border-slate-700 px-3 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition">
+        Clear
+      </button>
+    </div>
+  </div>
+
+  <!-- ===== Issues table ===== -->
+  <div class="rounded-2xl border border-slate-800 bg-slate-900/50 overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-800">
+      <h2 class="text-sm font-semibold text-slate-200">
+        Findings <span id="filtered-count" class="text-slate-500 font-normal"></span>
+      </h2>
+    </div>
+    <div class="max-h-[36rem] overflow-y-auto scroll-thin">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-slate-900 text-slate-400 text-xs uppercase tracking-wide z-10">
+          <tr>
+            <th class="text-left font-medium px-5 py-3 w-24">Severity</th>
+            <th class="text-left font-medium px-5 py-3">Technical Error &amp; Location</th>
+            <th class="text-left font-medium px-5 py-3 w-1/4 hidden lg:table-cell">Law / Standard</th>
+            <th class="text-left font-medium px-5 py-3 w-1/4 hidden xl:table-cell">Estimated Repercussion</th>
+          </tr>
+        </thead>
+        <tbody id="issues-body" class="divide-y divide-slate-800/70"></tbody>
+      </table>
+
+      <div id="empty-state" class="px-5 py-16 text-center text-slate-500">
+        <svg class="mx-auto h-10 w-10 text-slate-700" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+        <p id="empty-text" class="mt-3 text-sm">Waiting for the first results…</p>
+      </div>
+    </div>
+  </div>
+
+  <p class="text-xs text-slate-600">
+    Findings are produced by automated heuristics and mapped to indicative legal
+    exposure. This is not legal advice.
+  </p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  "use strict";
+
+  const root = document.querySelector("[data-scan-id]");
+  const SCAN_ID = root.dataset.scanId;
+  const TERMINAL = new Set(["completed", "failed", "cancelled"]);
+  const ARC_LEN = 2 * Math.PI * 52; // circumference of the risk gauge
+
+  const state = {
+    issues: [],
+    offset: 0,
+    status: "pending",
+    error: "",
+    counts: { Critical: 0, Warning: 0, Info: 0 },
+    risk: null,
+    gotSnapshot: false,
+    filters: { severity: "all", category: "all", search: "" },
+    renderQueued: false,
+  };
+
+  const el = (id) => document.getElementById(id);
+  const els = {
+    statusBadge: el("status-badge"), statusText: el("status-text"), statusDot: el("status-dot"),
+    elapsed: el("elapsed"), phaseLabel: el("phase-label"), phaseSpinner: el("phase-spinner"),
+    progressBar: el("progress-bar"), progressPct: el("progress-pct"), currentUrl: el("current-url"),
+    statScanned: el("stat-scanned"), statQueued: el("stat-queued"),
+    statLinks: el("stat-links"), statIssues: el("stat-issues"),
+    countCritical: el("count-critical"), countWarning: el("count-warning"), countInfo: el("count-info"),
+    riskScore: el("risk-score"), riskGrade: el("risk-grade"), riskLevel: el("risk-level"),
+    riskArc: el("risk-arc"), riskHeadline: el("risk-headline"), regChips: el("reg-chips"),
+    body: el("issues-body"), emptyState: el("empty-state"), emptyText: el("empty-text"),
+    filteredCount: el("filtered-count"), cancelBtn: el("cancel-btn"),
+    search: el("search"), filterSeverity: el("filter-severity"), filterCategory: el("filter-category"),
+  };
+
+  const SEV_STYLE = {
+    Critical: "bg-rose-500/15 text-rose-300 border border-rose-500/30",
+    Warning:  "bg-amber-500/15 text-amber-300 border border-amber-500/30",
+    Info:     "bg-sky-500/15 text-sky-300 border border-sky-500/30",
+  };
+  const CAT_STYLE = {
+    "Security": "text-amber-400", "Privacy": "text-violet-400",
+    "Accessibility": "text-emerald-400", "Dead Links": "text-rose-400",
+    "Content": "text-sky-400", "SEO": "text-teal-400", "Bugs": "text-fuchsia-400",
+  };
+  const PHASES = {
+    starting: "Preparing crawler…", crawling: "Crawling & analysing pages",
+    checking_links: "Verifying links", completed: "Scan complete",
+    cancelled: "Scan cancelled", failed: "Scan failed",
+  };
+  const LEVEL_COLOR = {
+    Low: "#16a34a", Guarded: "#65a30d", Elevated: "#ca8a04",
+    High: "#ea580c", Severe: "#dc2626",
+  };
+  const LEVEL_BADGE = {
+    Low: "bg-emerald-500/15 text-emerald-300", Guarded: "bg-lime-500/15 text-lime-300",
+    Elevated: "bg-yellow-500/15 text-yellow-300", High: "bg-orange-500/15 text-orange-300",
+    Severe: "bg-rose-500/15 text-rose-300",
+  };
+
+  // --- Safe DOM row construction (scraped content is treated as text) ----
+  function buildRow(issue) {
+    const tr = document.createElement("tr");
+    tr.className = "hover:bg-slate-800/40 transition align-top";
+
+    const sevTd = document.createElement("td");
+    sevTd.className = "px-5 py-3";
+    const badge = document.createElement("span");
+    badge.className = "inline-flex rounded-md px-2 py-0.5 text-xs font-semibold " +
+      (SEV_STYLE[issue.severity] || "bg-slate-700 text-slate-200");
+    badge.textContent = issue.severity;
+    sevTd.appendChild(badge);
+
+    // Main cell: category chip + message + details + type + URL.
+    const mainTd = document.createElement("td");
+    mainTd.className = "px-5 py-3";
+    const cat = document.createElement("span");
+    cat.className = "text-[11px] font-semibold mr-2 " + (CAT_STYLE[issue.category] || "text-slate-300");
+    cat.textContent = issue.category;
+    const msg = document.createElement("span");
+    msg.className = "text-slate-200";
+    msg.textContent = issue.message;
+    const line1 = document.createElement("p");
+    line1.append(cat, msg);
+    mainTd.appendChild(line1);
+    if (issue.details) {
+      const det = document.createElement("p");
+      det.className = "mt-0.5 text-xs text-slate-500 break-all";
+      det.textContent = issue.details;
+      mainTd.appendChild(det);
+    }
+    const a = document.createElement("a");
+    a.href = issue.url; a.target = "_blank"; a.rel = "noopener noreferrer nofollow";
+    a.className = "mt-1 inline-block text-[11px] text-brand-400 hover:text-brand-300 break-all font-mono";
+    a.textContent = issue.url;
+    mainTd.appendChild(a);
+    // Show law/penalty inline on small screens where their columns are hidden.
+    if (issue.law) {
+      const lawSmall = document.createElement("p");
+      lawSmall.className = "mt-1 text-[11px] text-slate-400 lg:hidden";
+      lawSmall.textContent = "⚖ " + issue.law;
+      mainTd.appendChild(lawSmall);
+    }
+
+    const lawTd = document.createElement("td");
+    lawTd.className = "px-5 py-3 hidden lg:table-cell";
+    const law = document.createElement("p");
+    law.className = "text-xs text-slate-300";
+    law.textContent = issue.law || "—";
+    lawTd.appendChild(law);
+
+    const penTd = document.createElement("td");
+    penTd.className = "px-5 py-3 hidden xl:table-cell";
+    const pen = document.createElement("p");
+    pen.className = "text-xs text-slate-400";
+    pen.textContent = issue.penalty || "—";
+    penTd.appendChild(pen);
+
+    tr.append(sevTd, mainTd, lawTd, penTd);
+    return tr;
+  }
+
+  function matchesFilters(issue) {
+    const f = state.filters;
+    if (f.severity !== "all" && issue.severity !== f.severity) return false;
+    if (f.category !== "all" && issue.category !== f.category) return false;
+    if (f.search) {
+      const hay = (issue.message + " " + issue.details + " " + issue.url + " " +
+                   issue.type + " " + (issue.law || "") + " " + (issue.penalty || "")).toLowerCase();
+      if (!hay.includes(f.search)) return false;
+    }
+    return true;
+  }
+
+  function scheduleRender() {
+    if (state.renderQueued) return;
+    state.renderQueued = true;
+    requestAnimationFrame(() => { state.renderQueued = false; render(); });
+  }
+
+  function render() {
+    const visible = state.issues.filter(matchesFilters);
+    els.body.innerHTML = "";
+    if (visible.length === 0) {
+      els.emptyState.classList.remove("hidden");
+      els.emptyText.textContent = state.issues.length === 0
+        ? (TERMINAL.has(state.status) ? "No issues found — this site looks clean!" : "Waiting for the first results…")
+        : "No findings match the current filters.";
+    } else {
+      els.emptyState.classList.add("hidden");
+      const frag = document.createDocumentFragment();
+      for (let i = visible.length - 1; i >= 0; i--) frag.appendChild(buildRow(visible[i]));
+      els.body.appendChild(frag);
+    }
+    els.filteredCount.textContent = visible.length === state.issues.length
+      ? `(${state.issues.length})` : `(${visible.length} of ${state.issues.length})`;
+  }
+
+  // --- Risk gauge + counters ---------------------------------------------
+  function applyRisk(risk) {
+    if (!risk) return;
+    state.risk = risk;
+    const score = risk.score || 0;
+    const color = LEVEL_COLOR[risk.level] || "#16a34a";
+    els.riskScore.textContent = score;
+    els.riskGrade.textContent = "Grade " + (risk.grade || "A");
+    els.riskArc.style.strokeDashoffset = ARC_LEN * (1 - score / 100);
+    els.riskArc.style.stroke = color;
+    els.riskLevel.textContent = (risk.level || "Low") + " Risk";
+    els.riskLevel.className = "inline-flex rounded-full px-3 py-1 text-xs font-semibold " +
+      (LEVEL_BADGE[risk.level] || LEVEL_BADGE.Low);
+    els.riskHeadline.textContent = risk.headline || "";
+
+    // Regulation chips.
+    const regs = risk.top_regulations || [];
+    els.regChips.innerHTML = "";
+    if (regs.length === 0) {
+      const none = document.createElement("span");
+      none.className = "text-xs text-slate-600";
+      none.textContent = "None yet.";
+      els.regChips.appendChild(none);
+    } else {
+      regs.forEach(([name, count]) => {
+        const chip = document.createElement("span");
+        chip.className = "inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-950/60 px-2.5 py-1 text-xs text-slate-300";
+        chip.textContent = `${name} · ${count}`;
+        els.regChips.appendChild(chip);
+      });
+    }
+  }
+
+  function applyCounts(counts) {
+    const sev = counts?.by_severity || counts || {};
+    els.countCritical.textContent = sev.Critical || 0;
+    els.countWarning.textContent = sev.Warning || 0;
+    els.countInfo.textContent = sev.Info || 0;
+    const total = (counts && counts.total != null) ? counts.total : state.issues.length;
+    els.statIssues.textContent = total;
+  }
+
+  function computePercent(p) {
+    if (TERMINAL.has(state.status)) return 100;
+    const target = Math.max(Math.min(p.max_pages || 1, p.pages_discovered || 1), 1);
+    const crawlFrac = Math.min((p.pages_scanned || 0) / target, 1);
+    const linkFrac = p.links_total ? Math.min((p.links_checked || 0) / p.links_total, 1)
+                                   : (p.phase === "checking_links" ? 1 : 0);
+    return Math.round((crawlFrac * 0.8 + linkFrac * 0.2) * 100);
+  }
+
+  function applyProgress(p) {
+    if (!p) return;
+    const pct = computePercent(p);
+    els.progressBar.style.width = pct + "%";
+    els.progressPct.textContent = pct + "%";
+    els.phaseLabel.textContent = PHASES[p.phase] || PHASES[state.status] || "Working…";
+    els.currentUrl.textContent = p.current_url ? "→ " + p.current_url : "";
+    els.statScanned.textContent = p.pages_scanned ?? 0;
+    els.statQueued.textContent = p.queue_size ?? 0;
+    els.statLinks.textContent = p.links_total ? `${p.links_checked ?? 0}/${p.links_total}` : (p.links_checked ?? 0);
+  }
+
+  function setStatusBadge() {
+    const map = {
+      pending:   ["bg-slate-700 text-slate-200", "bg-slate-300", "Pending"],
+      running:   ["bg-brand-600/20 text-brand-300", "bg-brand-400 animate-pulse", "Running"],
+      completed: ["bg-emerald-600/20 text-emerald-300", "bg-emerald-400", "Completed"],
+      failed:    ["bg-rose-600/20 text-rose-300", "bg-rose-400", "Failed"],
+      cancelled: ["bg-slate-700 text-slate-300", "bg-slate-400", "Cancelled"],
+    };
+    const [badgeCls, dotCls, text] = map[state.status] || map.pending;
+    els.statusBadge.className =
+      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold " + badgeCls;
+    els.statusDot.className = "h-1.5 w-1.5 rounded-full " + dotCls;
+    els.statusText.textContent = text;
+  }
+
+  function setElapsed(seconds) {
+    if (seconds != null) els.elapsed.textContent = seconds > 0 ? `· ${seconds}s elapsed` : "";
+  }
+
+  function finalize() {
+    setStatusBadge();
+    els.phaseSpinner.classList.add("hidden");
+    els.progressBar.style.width = "100%";
+    els.progressPct.textContent = "100%";
+    els.cancelBtn.disabled = true;
+    els.cancelBtn.classList.add("opacity-40", "cursor-not-allowed");
+    els.phaseLabel.textContent = PHASES[state.status] || "Done";
+    if (state.status === "failed" && state.error) {
+      els.currentUrl.classList.add("text-rose-400");
+      els.currentUrl.textContent = "Error: " + state.error;
+    } else {
+      els.currentUrl.textContent = "";
+    }
+    scheduleRender();
+  }
+
+  // --- Event handling (shared by SSE + polling) --------------------------
+  function handleEvent(ev) {
+    switch (ev.type) {
+      case "snapshot":
+        state.gotSnapshot = true;
+        state.status = ev.status;
+        state.error = ev.error || "";
+        state.issues = Array.isArray(ev.issues) ? ev.issues.slice() : [];
+        state.offset = ev.issue_total ?? state.issues.length;
+        setStatusBadge();
+        applyProgress(ev.progress);
+        applyCounts(ev.counts);
+        applyRisk(ev.risk);
+        setElapsed(ev.elapsed);
+        scheduleRender();
+        if (TERMINAL.has(state.status)) finalize();
+        break;
+      case "issue":
+        state.issues.push(ev.issue);
+        state.offset = state.issues.length;
+        els.statIssues.textContent = state.issues.length;
+        scheduleRender();
+        break;
+      case "progress":
+        applyProgress(ev.progress);
+        applyCounts(ev.counts);
+        applyRisk(ev.risk);
+        setElapsed(ev.elapsed);
+        break;
+      case "status":
+        state.status = ev.status;
+        state.error = ev.error || "";
+        setStatusBadge();
+        applyCounts(ev.counts);
+        applyRisk(ev.risk);
+        setElapsed(ev.elapsed);
+        if (TERMINAL.has(state.status)) finalize();
+        break;
+    }
+  }
+
+  // --- Server-Sent Events (primary) with polling fallback ----------------
+  let eventSource = null;
+  let pollingActive = false;
+
+  function startSSE() {
+    if (typeof EventSource === "undefined") { startPolling(); return; }
+    eventSource = new EventSource(`/api/scan/${SCAN_ID}/stream`);
+    eventSource.onmessage = (e) => {
+      try { handleEvent(JSON.parse(e.data)); } catch (_) {}
+    };
+    eventSource.addEventListener("end", () => { eventSource.close(); });
+    eventSource.onerror = () => {
+      // If the scan is over, just close. Otherwise, if we never connected,
+      // fall back to polling.
+      if (TERMINAL.has(state.status)) { eventSource.close(); return; }
+      if (!state.gotSnapshot && !pollingActive) {
+        eventSource.close();
+        startPolling();
+      }
+    };
+  }
+
+  async function startPolling() {
+    if (pollingActive) return;
+    pollingActive = true;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/scan/${SCAN_ID}/status?since=${state.offset}`);
+        if (!res.ok) { els.statusText.textContent = "Unavailable"; return; }
+        const data = await res.json();
+        state.status = data.status;
+        state.error = data.error || "";
+        if (Array.isArray(data.new_issues) && data.new_issues.length) {
+          state.issues.push(...data.new_issues);
+        }
+        state.offset = data.issue_total ?? state.issues.length;
+        setStatusBadge();
+        applyProgress(data.progress);
+        applyCounts(data.counts);
+        applyRisk(data.risk);
+        setElapsed(data.elapsed);
+        scheduleRender();
+        if (TERMINAL.has(state.status)) { finalize(); return; }
+      } catch (_) { /* transient — keep polling */ }
+      setTimeout(tick, 1300);
+    };
+    tick();
+  }
+
+  // --- Filter wiring ------------------------------------------------------
+  els.search.addEventListener("input", (e) => { state.filters.search = e.target.value.trim().toLowerCase(); scheduleRender(); });
+  els.filterSeverity.addEventListener("change", (e) => { state.filters.severity = e.target.value; scheduleRender(); });
+  els.filterCategory.addEventListener("change", (e) => { state.filters.category = e.target.value; scheduleRender(); });
+  el("clear-filters").addEventListener("click", () => {
+    state.filters = { severity: "all", category: "all", search: "" };
+    els.search.value = ""; els.filterSeverity.value = "all"; els.filterCategory.value = "all";
+    scheduleRender();
+  });
+  document.querySelectorAll(".sev-card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const sev = card.dataset.sev;
+      state.filters.severity = state.filters.severity === sev ? "all" : sev;
+      els.filterSeverity.value = state.filters.severity;
+      scheduleRender();
+    });
+  });
+  els.cancelBtn.addEventListener("click", async () => {
+    if (TERMINAL.has(state.status)) return;
+    els.cancelBtn.disabled = true;
+    els.cancelBtn.textContent = "Cancelling…";
+    try { await fetch(`/api/scan/${SCAN_ID}/cancel`, { method: "POST" }); } catch (_) {}
+  });
+
+  // Go.
+  setStatusBadge();
+  startSSE();
+})();
+</script>
+{% endblock %}

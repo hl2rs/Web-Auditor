@@ -1,0 +1,21 @@
+# ---------------------------------------------------------------------------
+# Web Scraper & Site Auditor - Python dependencies
+# ---------------------------------------------------------------------------
+# Core web framework
+Flask==3.0.3
+
+# Headless browser automation for JS rendering + console/network bug capture
+playwright==1.47.0
+
+# Fast HTML parsing
+beautifulsoup4==4.12.3
+lxml==5.3.0
+
+# Asynchronous HTTP client used by the link checker
+aiohttp==3.10.5
+
+# PDF report generation
+reportlab==4.2.2
+
+# Production WSGI server (optional but recommended)
+waitress==3.0.0

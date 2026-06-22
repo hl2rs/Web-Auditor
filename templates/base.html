@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Site Auditor{% endblock %}</title>
+
+  <!-- Tailwind CSS via CDN (no build step required) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Extend the default Tailwind theme with a small brand palette.
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: "#eef2ff", 100: "#e0e7ff", 400: "#818cf8",
+              500: "#6366f1", 600: "#4f46e5", 700: "#4338ca",
+            },
+          },
+          fontFamily: {
+            sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+          },
+        },
+      },
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* Subtle animated gradient used on the hero/header. */
+    .gradient-text {
+      background: linear-gradient(90deg, #818cf8, #34d399, #38bdf8);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+    /* Thin custom scrollbar for the issue stream. */
+    .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+    .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+  </style>
+  {% block head_extra %}{% endblock %}
+</head>
+<body class="h-full min-h-screen bg-slate-950 text-slate-200 font-sans antialiased flex flex-col">
+  <!-- Top navigation -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-20">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <a href="{{ url_for('index') }}" class="flex items-center gap-2.5 group">
+        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600/20 ring-1 ring-brand-500/40 group-hover:bg-brand-600/30 transition">
+          <!-- radar / scan icon -->
+          <svg class="h-5 w-5 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9" />
+            <path d="M12 12 21 6" />
+            <path d="M12 3a9 9 0 0 1 9 9" />
+          </svg>
+        </span>
+        <span class="text-lg font-bold tracking-tight">Site<span class="gradient-text">Auditor</span></span>
+      </a>
+      <nav class="flex items-center gap-1 text-sm">
+        <a href="{{ url_for('index') }}"
+           class="px-3 py-2 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800/70 transition">
+          New Scan
+        </a>
+        <a href="https://playwright.dev" target="_blank" rel="noopener"
+           class="px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/70 transition hidden sm:block">
+          Docs
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Page content -->
+  <main class="flex-1 w-full">
+    {% if not_found %}
+      <div class="max-w-xl mx-auto px-6 py-24 text-center">
+        <p class="text-7xl font-extrabold gradient-text">404</p>
+        <h1 class="mt-4 text-2xl font-semibold text-white">Page not found</h1>
+        <p class="mt-2 text-slate-400">The scan or page you are looking for does not exist.</p>
+        <a href="{{ url_for('index') }}"
+           class="mt-8 inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 px-5 py-2.5 font-medium text-white transition">
+          Start a new scan
+        </a>
+      </div>
+    {% else %}
+      {% block content %}{% endblock %}
+    {% endif %}
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 mt-12">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
+      <p>SiteAuditor &mdash; Flask &middot; Playwright &middot; BeautifulSoup</p>
+      <p class="text-slate-600">Scan only sites you are authorised to test.</p>
+    </div>
+  </footer>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

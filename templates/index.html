@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% block title %}New Scan &middot; SiteAuditor{% endblock %}
+
+{% block content %}
+{#
+  Per-module presentation metadata. The backend only cares about the module
+  *key*; everything else here is purely for the UI.
+#}
+{% set module_meta = {
+  "links":         {"label": "Dead Links & Redirects", "desc": "Find 404s, unreachable hosts and redirect loops.", "accent": "text-rose-400"},
+  "security":      {"label": "Security Scanner",        "desc": "Headers, mixed content, secrets & staging URLs.",  "accent": "text-amber-400"},
+  "accessibility": {"label": "Accessibility (WCAG 2.2)","desc": "Alt text, landmarks, target size, link text.",     "accent": "text-emerald-400"},
+  "privacy":       {"label": "Privacy & Cookies",       "desc": "Pre-consent trackers, dark patterns, PII forms.",  "accent": "text-violet-400"},
+  "content":       {"label": "Content Integrity",       "desc": "Duplicate tags & cross-page contradictions.",      "accent": "text-sky-400"},
+  "seo":           {"label": "SEO Analysis",             "desc": "Canonical, viewport, robots, Open Graph & schema.", "accent": "text-teal-400"},
+  "bugs":          {"label": "Console & JS Bugs",       "desc": "Runtime exceptions and failed network calls.",     "accent": "text-fuchsia-400"}
+} %}
+
+<section class="relative overflow-hidden">
+  <!-- Decorative background glow -->
+  <div class="pointer-events-none absolute inset-0 -z-10">
+    <div class="absolute -top-24 left-1/2 -translate-x-1/2 h-72 w-[40rem] rounded-full bg-brand-600/20 blur-3xl"></div>
+  </div>
+
+  <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-10 text-center">
+    <span class="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-3 py-1 text-xs text-slate-300">
+      <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      Headless crawler &middot; JS rendering enabled
+    </span>
+    <h1 class="mt-5 text-4xl sm:text-5xl font-extrabold tracking-tight text-white">
+      Audit your site for <span class="gradient-text">legal &amp; compliance risk</span>
+    </h1>
+    <p class="mt-4 text-slate-400 text-lg">
+      Crawl a domain and map every accessibility, privacy, security, dead-link and
+      content issue to the laws it implicates &mdash; with a live Risk Index and a
+      downloadable PDF report.
+    </p>
+  </div>
+</section>
+
+<section class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
+  <form id="scan-form"
+        class="rounded-2xl border border-slate-800 bg-slate-900/50 shadow-2xl shadow-black/30 p-6 sm:p-8 space-y-8">
+
+    <!-- Target URL -->
+    <div>
+      <label for="url" class="block text-sm font-medium text-slate-300 mb-2">Target URL</label>
+      <div class="relative">
+        <span class="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500">
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10" /><path d="M2 12h20" />
+            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+          </svg>
+        </span>
+        <input id="url" name="url" type="text" required
+               placeholder="example.com"
+               autocomplete="off" spellcheck="false"
+               class="w-full rounded-xl bg-slate-950/70 border border-slate-700 pl-11 pr-4 py-3 text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition" />
+      </div>
+      <p class="mt-2 text-xs text-slate-500">https:// is assumed when no scheme is provided.</p>
+    </div>
+
+    <!-- Depth & page limits -->
+    <div class="grid sm:grid-cols-2 gap-6">
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label for="max_depth" class="text-sm font-medium text-slate-300">Max crawl depth</label>
+          <span id="depth-val" class="text-sm font-semibold text-brand-400">2</span>
+        </div>
+        <input id="max_depth" name="max_depth" type="range" min="0" max="{{ depth_ceiling }}" value="2"
+               class="w-full accent-brand-500 cursor-pointer" />
+        <p class="mt-1 text-xs text-slate-500">0 = only the starting page.</p>
+      </div>
+      <div>
+        <div class="flex items-center justify-between mb-2">
+          <label for="max_pages" class="text-sm font-medium text-slate-300">Max pages</label>
+          <span id="pages-val" class="text-sm font-semibold text-brand-400">25</span>
+        </div>
+        <input id="max_pages" name="max_pages" type="range" min="1" max="{{ pages_ceiling }}" value="25"
+               class="w-full accent-brand-500 cursor-pointer" />
+        <p class="mt-1 text-xs text-slate-500">Hard ceiling: {{ pages_ceiling }} pages.</p>
+      </div>
+    </div>
+
+    <!-- Analysis modules -->
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-sm font-medium text-slate-300">Analysis modules</h3>
+        <button type="button" id="toggle-all"
+                class="text-xs text-brand-400 hover:text-brand-300 transition">Toggle all</button>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        {% for key in modules %}
+        {% set meta = module_meta[key] %}
+        <label class="group flex items-start gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4 cursor-pointer hover:border-slate-700 transition">
+          <input type="checkbox" name="modules" value="{{ key }}" checked
+                 class="module-toggle peer sr-only" />
+          <span class="mt-0.5 inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full bg-slate-700 peer-checked:bg-brand-600 transition">
+            <span class="h-4 w-4 translate-x-0.5 rounded-full bg-white transition peer-checked:translate-x-4"></span>
+          </span>
+          <span>
+            <span class="block text-sm font-semibold {{ meta.accent }}">{{ meta.label }}</span>
+            <span class="block text-xs text-slate-500 mt-0.5">{{ meta.desc }}</span>
+          </span>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    <div id="form-error"
+         class="hidden rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300"></div>
+
+    <!-- Submit -->
+    <button type="submit" id="submit-btn"
+            class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-60 disabled:cursor-not-allowed px-5 py-3.5 font-semibold text-white shadow-lg shadow-brand-600/20 transition">
+      <svg id="submit-spinner" class="hidden h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+      </svg>
+      <span id="submit-label">Start Audit</span>
+    </button>
+  </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // --- Live value labels for the range sliders ---------------------------
+  const depth = document.getElementById("max_depth");
+  const pages = document.getElementById("max_pages");
+  const depthVal = document.getElementById("depth-val");
+  const pagesVal = document.getElementById("pages-val");
+  depth.addEventListener("input", () => (depthVal.textContent = depth.value));
+  pages.addEventListener("input", () => (pagesVal.textContent = pages.value));
+
+  // --- "Toggle all" modules ---------------------------------------------
+  const toggles = Array.from(document.querySelectorAll(".module-toggle"));
+  document.getElementById("toggle-all").addEventListener("click", () => {
+    const allOn = toggles.every((t) => t.checked);
+    toggles.forEach((t) => (t.checked = !allOn));
+  });
+
+  // --- Submit the scan via the JSON API ----------------------------------
+  const form = document.getElementById("scan-form");
+  const errorBox = document.getElementById("form-error");
+  const btn = document.getElementById("submit-btn");
+  const spinner = document.getElementById("submit-spinner");
+  const label = document.getElementById("submit-label");
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorBox.classList.add("hidden");
+
+    const modules = toggles.filter((t) => t.checked).map((t) => t.value);
+    if (modules.length === 0) {
+      showError("Select at least one analysis module.");
+      return;
+    }
+
+    const payload = {
+      url: document.getElementById("url").value.trim(),
+      max_depth: Number(depth.value),
+      max_pages: Number(pages.value),
+      modules,
+    };
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || "Could not start the scan.");
+        setLoading(false);
+        return;
+      }
+      // Hand off to the live report view.
+      window.location.href = data.redirect;
+    } catch (err) {
+      showError("Network error: " + err.message);
+      setLoading(false);
+    }
+  });
+
+  function showError(message) {
+    errorBox.textContent = message;
+    errorBox.classList.remove("hidden");
+  }
+  function setLoading(isLoading) {
+    btn.disabled = isLoading;
+    spinner.classList.toggle("hidden", !isLoading);
+    label.textContent = isLoading ? "Starting\u2026" : "Start Audit";
+  }
+</script>
+{% endblock %}
