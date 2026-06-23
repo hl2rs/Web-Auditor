@@ -1,0 +1,467 @@
+{% extends "base.html" %}
+{% block title %}Dashboard &middot; Auditor{% endblock %}
+
+{% block head_extra %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<style>
+  .chart-wrap { position: relative; height: 16rem; }
+  .chart-wrap-lg { position: relative; height: 22rem; }
+  .card { border-radius: 1rem; border: 1px solid #1b1f25; background: rgba(11, 13, 16, .5); }
+</style>
+{% endblock %}
+
+{% block content %}
+<section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6"
+         data-scan-id="{{ scan_id }}">
+
+  <!-- ===== Header ===== -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+    <div class="min-w-0">
+      <div class="flex items-center gap-3">
+        <span id="status-badge"
+              class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold bg-slate-800 text-slate-300">
+          <span id="status-dot" class="h-1.5 w-1.5 rounded-full bg-slate-400"></span>
+          <span id="status-text">Loading…</span>
+        </span>
+        <span id="generated" class="text-xs text-slate-500"></span>
+      </div>
+      <h1 class="mt-2 font-display text-2xl font-bold text-white truncate">Audit Dashboard</h1>
+      <p id="target-url" class="text-sm text-slate-400 truncate">{{ start_url }}</p>
+    </div>
+
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <a href="/scan/{{ scan_id }}"
+         class="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+        Live report
+      </a>
+      <a href="/api/scan/{{ scan_id }}/export"
+         class="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
+        JSON
+      </a>
+      <a href="/api/scan/{{ scan_id }}/report.pdf"
+         class="btn-primary inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        PDF Report
+      </a>
+    </div>
+  </div>
+
+  <!-- ===== Loading / error ===== -->
+  <div id="loading" class="rounded-2xl border border-slate-800 bg-slate-900/50 px-6 py-16 text-center text-slate-400">
+    <svg class="mx-auto h-8 w-8 animate-spin text-brand-400" viewBox="0 0 24 24" fill="none">
+      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+      <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+    </svg>
+    <p class="mt-3 text-sm">Building dashboard…</p>
+  </div>
+  <div id="error-box"
+       class="hidden rounded-2xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-300"></div>
+
+  <!-- ===== Dashboard content ===== -->
+  <div id="content" class="hidden space-y-6">
+
+    <!-- Risk + key stats -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- Risk gauge -->
+      <div class="card p-6 flex flex-col items-center text-center">
+        <h2 class="text-sm font-semibold text-slate-300 self-start">Legal &amp; Compliance Risk Index</h2>
+        <div class="relative my-3" style="width:180px;height:180px">
+          <canvas id="riskGauge"></canvas>
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            <span id="risk-score" class="text-5xl font-extrabold text-white leading-none">0</span>
+            <span id="risk-grade" class="mt-1 text-xs font-semibold text-slate-400">Grade A</span>
+          </div>
+        </div>
+        <span id="risk-level" class="inline-flex rounded-full px-3 py-1 text-xs font-semibold bg-emerald-500/15 text-emerald-300">Low Risk</span>
+        <p id="risk-headline" class="mt-3 text-xs text-slate-500 leading-relaxed"></p>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-3 content-start">
+        <div class="card p-4"><p class="text-xs text-slate-500">Total findings</p><p id="stat-total" class="mt-1 text-2xl font-bold text-white">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Critical</p><p id="stat-critical" class="mt-1 text-2xl font-bold text-rose-400">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Warning</p><p id="stat-warning" class="mt-1 text-2xl font-bold text-amber-400">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Info</p><p id="stat-info" class="mt-1 text-2xl font-bold text-sky-400">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Pages crawled</p><p id="stat-pages" class="mt-1 text-2xl font-bold text-white">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Categories hit</p><p id="stat-categories" class="mt-1 text-2xl font-bold text-white">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Regulations</p><p id="stat-regulations" class="mt-1 text-2xl font-bold text-white">0</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Elapsed</p><p id="stat-elapsed" class="mt-1 text-2xl font-bold text-white">0s</p></div>
+        <div class="card p-4"><p class="text-xs text-slate-500">Highest-risk area</p><p id="stat-worst" class="mt-1 text-lg font-bold text-white truncate">—</p></div>
+      </div>
+    </div>
+
+    <!-- Doughnuts + regulations -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-3">Findings by severity</h3>
+        <div class="chart-wrap"><canvas id="sevChart"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-3">Findings by category</h3>
+        <div class="chart-wrap"><canvas id="catChart"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-3">Top regulations implicated</h3>
+        <div class="chart-wrap"><canvas id="regChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Stacked severity by category -->
+    <div class="card p-5">
+      <h3 class="text-sm font-semibold text-slate-200 mb-3">Severity breakdown by category</h3>
+      <div class="chart-wrap-lg"><canvas id="stackChart"></canvas></div>
+    </div>
+
+    <!-- Radar + status + types -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-3">Risk weight by category</h3>
+        <div class="chart-wrap"><canvas id="radarChart"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-3">HTTP status of crawled pages</h3>
+        <div class="chart-wrap"><canvas id="statusChart"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-3">Most common issue types</h3>
+        <div class="chart-wrap"><canvas id="typeChart"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Page load times -->
+    <div class="card p-5">
+      <h3 class="text-sm font-semibold text-slate-200 mb-3">Slowest pages <span class="text-slate-500 font-normal">(render time)</span></h3>
+      <div class="chart-wrap-lg"><canvas id="loadChart"></canvas></div>
+    </div>
+
+    <!-- Category ranking table -->
+    <div class="card overflow-hidden">
+      <div class="px-5 py-3 border-b border-slate-800">
+        <h3 class="text-sm font-semibold text-slate-200">Category ranking <span class="text-slate-500 font-normal">(worst-first, normalised by site size)</span></h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-900 text-slate-400 text-xs uppercase tracking-wide">
+            <tr>
+              <th class="text-left font-medium px-5 py-3 w-12">#</th>
+              <th class="text-left font-medium px-5 py-3">Category</th>
+              <th class="text-left font-medium px-5 py-3">Grade</th>
+              <th class="text-right font-medium px-5 py-3">Critical</th>
+              <th class="text-right font-medium px-5 py-3">Warning</th>
+              <th class="text-right font-medium px-5 py-3">Info</th>
+              <th class="text-right font-medium px-5 py-3">Total</th>
+              <th class="text-right font-medium px-5 py-3">Per page</th>
+            </tr>
+          </thead>
+          <tbody id="rank-body" class="divide-y divide-slate-800/70"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="text-xs text-slate-600">
+      Findings are produced by automated heuristics and mapped to indicative legal
+      exposure. This is not legal advice.
+    </p>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  "use strict";
+
+  const SCAN_ID = document.querySelector("[data-scan-id]").dataset.scanId;
+  const $ = (id) => document.getElementById(id);
+
+  // --- Palette ------------------------------------------------------------
+  const SEV_COLORS = { Critical: "#f43f5e", Warning: "#f59e0b", Info: "#38bdf8" };
+  const CAT_COLORS = {
+    "Security": "#f59e0b", "Privacy": "#a78bfa", "Accessibility": "#34d399",
+    "SEO": "#2dd4bf", "Dead Links": "#fb7185", "Content": "#38bdf8", "Bugs": "#e879f9",
+  };
+  const SILVER = "#c3c9d1";
+  const LEVEL_COLOR = {
+    Low: "#16a34a", Guarded: "#65a30d", Elevated: "#ca8a04", High: "#ea580c", Severe: "#dc2626",
+  };
+  const catColor = (c) => CAT_COLORS[c] || "#94a3b8";
+  const hexA = (hex, a) => {
+    const n = parseInt(hex.slice(1), 16);
+    return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  };
+
+  // --- Chart.js global theme ---------------------------------------------
+  if (window.Chart) {
+    Chart.defaults.color = "#9aa3a0";
+    Chart.defaults.borderColor = "rgba(255,255,255,0.06)";
+    Chart.defaults.font.family = "Inter, system-ui, sans-serif";
+    Chart.defaults.plugins.legend.labels.boxWidth = 12;
+    Chart.defaults.plugins.legend.labels.boxHeight = 12;
+    Chart.defaults.plugins.legend.labels.padding = 14;
+    Chart.defaults.plugins.legend.labels.usePointStyle = true;
+    Chart.defaults.maintainAspectRatio = false;
+  }
+
+  // --- Load the report ----------------------------------------------------
+  fetch(`/api/scan/${SCAN_ID}/export`)
+    .then((r) => { if (!r.ok) throw new Error("Could not load report (HTTP " + r.status + ")"); return r.json(); })
+    .then(render)
+    .catch((e) => {
+      $("loading").classList.add("hidden");
+      const box = $("error-box");
+      box.textContent = e.message || "Failed to load dashboard data.";
+      box.classList.remove("hidden");
+    });
+
+  // --- Render everything --------------------------------------------------
+  function render(report) {
+    $("loading").classList.add("hidden");
+    $("content").classList.remove("hidden");
+
+    const risk = report.risk || {};
+    const summary = report.summary || {};
+    const bySev = summary.by_severity || {};
+    const byCat = summary.by_category || {};
+    const cr = report.category_ranks || {};
+    const ranks = cr.categories || [];
+    const pages = report.pages || [];
+    const issues = report.issues || [];
+    const pageCount = cr.pages || pages.length;
+
+    setStatusBadge(report.status || "completed");
+    if (report.generated_at) {
+      const d = new Date(report.generated_at);
+      if (!isNaN(d)) $("generated").textContent = "· generated " + d.toLocaleString();
+    }
+
+    // Risk gauge
+    const score = risk.score || 0;
+    const level = risk.level || "Low";
+    const levelColor = LEVEL_COLOR[level] || "#16a34a";
+    $("risk-score").textContent = score;
+    $("risk-grade").textContent = "Grade " + (risk.grade || "A");
+    const rl = $("risk-level");
+    rl.textContent = level + " Risk";
+    rl.style.color = levelColor;
+    rl.style.backgroundColor = hexA(levelColor, 0.15);
+    $("risk-headline").textContent = risk.headline || "";
+    new Chart($("riskGauge"), {
+      type: "doughnut",
+      data: { datasets: [{ data: [score, 100 - score], backgroundColor: [levelColor, "rgba(255,255,255,0.06)"], borderWidth: 0, cutout: "80%" }] },
+      options: { plugins: { legend: { display: false }, tooltip: { enabled: false } }, animation: { animateRotate: true } },
+    });
+
+    // Stat cards
+    $("stat-total").textContent = (summary.total ?? issues.length).toLocaleString();
+    $("stat-critical").textContent = bySev.Critical || 0;
+    $("stat-warning").textContent = bySev.Warning || 0;
+    $("stat-info").textContent = bySev.Info || 0;
+    $("stat-pages").textContent = pageCount;
+    $("stat-categories").textContent = Object.keys(byCat).length;
+    const regCount = (risk.top_regulations && risk.top_regulations.length) || Object.keys(risk.by_regulation || {}).length;
+    $("stat-regulations").textContent = regCount;
+    $("stat-elapsed").textContent = (report.elapsed_seconds || 0) + "s";
+    $("stat-worst").textContent = cr.worst || "—";
+
+    // Severity doughnut
+    const sevOrder = ["Critical", "Warning", "Info"].filter((s) => (bySev[s] || 0) > 0);
+    makeDoughnut("sevChart", sevOrder, sevOrder.map((s) => bySev[s]), sevOrder.map((s) => SEV_COLORS[s]));
+
+    // Category doughnut
+    const catLabels = Object.keys(byCat);
+    makeDoughnut("catChart", catLabels, catLabels.map((c) => byCat[c]), catLabels.map(catColor));
+
+    // Top regulations (horizontal bar)
+    const regs = (risk.top_regulations && risk.top_regulations.length)
+      ? risk.top_regulations.slice(0, 8)
+      : Object.entries(risk.by_regulation || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    makeBar("regChart", regs.map((r) => r[0]), regs.map((r) => r[1]), SILVER, { horizontal: true });
+
+    // Stacked severity by category
+    if (ranks.length) {
+      new Chart($("stackChart"), {
+        type: "bar",
+        data: {
+          labels: ranks.map((r) => r.category),
+          datasets: [
+            { label: "Critical", data: ranks.map((r) => r.critical), backgroundColor: SEV_COLORS.Critical, borderRadius: 4 },
+            { label: "Warning", data: ranks.map((r) => r.warning), backgroundColor: SEV_COLORS.Warning, borderRadius: 4 },
+            { label: "Info", data: ranks.map((r) => r.info), backgroundColor: SEV_COLORS.Info, borderRadius: 4 },
+          ],
+        },
+        options: {
+          plugins: { legend: { position: "bottom" } },
+          scales: {
+            x: { stacked: true, grid: { display: false } },
+            y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } },
+          },
+        },
+      });
+    } else { emptyNote("stackChart"); }
+
+    // Risk weight radar
+    const rcByCat = risk.by_category || {};
+    const radarLabels = Object.keys(rcByCat);
+    if (radarLabels.length >= 3) {
+      new Chart($("radarChart"), {
+        type: "radar",
+        data: { labels: radarLabels, datasets: [{ label: "Risk weight", data: radarLabels.map((c) => rcByCat[c]), backgroundColor: hexA(SILVER, 0.15), borderColor: SILVER, borderWidth: 2, pointBackgroundColor: SILVER, pointRadius: 3 }] },
+        options: {
+          plugins: { legend: { display: false } },
+          scales: { r: { angleLines: { color: "rgba(255,255,255,.08)" }, grid: { color: "rgba(255,255,255,.08)" }, pointLabels: { color: "#9aa3a0", font: { size: 10 } }, ticks: { display: false, backdropColor: "transparent" } } },
+        },
+      });
+    } else { emptyNote("radarChart", "Need 3+ categories to plot"); }
+
+    // HTTP status doughnut
+    const statusBuckets = bucketStatuses(pages);
+    const statusKeys = Object.keys(statusBuckets);
+    makeDoughnut("statusChart", statusKeys, statusKeys.map((k) => statusBuckets[k]), statusKeys.map(statusColor));
+
+    // Top issue types
+    const typeCounts = {};
+    issues.forEach((i) => { const t = i.type || "other"; typeCounts[t] = (typeCounts[t] || 0) + 1; });
+    const topTypes = Object.entries(typeCounts).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    makeBar("typeChart", topTypes.map((t) => t[0]), topTypes.map((t) => t[1]), SILVER, { horizontal: true });
+
+    // Slowest pages
+    const slow = pages.filter((p) => p.load_time_ms).slice().sort((a, b) => b.load_time_ms - a.load_time_ms).slice(0, 12);
+    makeBar("loadChart", slow.map((p) => shortUrl(p.url)), slow.map((p) => p.load_time_ms), "#38bdf8", { horizontal: true, unit: " ms" });
+
+    renderRankTable(ranks);
+  }
+
+  // --- Chart helpers ------------------------------------------------------
+  function makeDoughnut(id, labels, data, colors) {
+    if (!labels.length || data.reduce((a, b) => a + b, 0) === 0) { emptyNote(id); return; }
+    new Chart($(id), {
+      type: "doughnut",
+      data: { labels, datasets: [{ data, backgroundColor: colors, borderColor: "#0b0d10", borderWidth: 2, hoverOffset: 6 }] },
+      options: { cutout: "62%", plugins: { legend: { position: "bottom" } } },
+    });
+  }
+
+  function makeBar(id, labels, data, color, opts = {}) {
+    if (!labels.length) { emptyNote(id); return; }
+    const horizontal = !!opts.horizontal;
+    const unit = opts.unit || "";
+    new Chart($(id), {
+      type: "bar",
+      data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 5, maxBarThickness: 26 }] },
+      options: {
+        indexAxis: horizontal ? "y" : "x",
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: { label: (c) => " " + c.parsed[horizontal ? "x" : "y"].toLocaleString() + unit } },
+        },
+        scales: {
+          x: { grid: { display: !horizontal, color: "rgba(255,255,255,.05)" }, ticks: { precision: 0 } },
+          y: { grid: { display: horizontal, color: "rgba(255,255,255,.05)" }, ticks: { precision: 0, autoSkip: false, font: { size: 11 } } },
+        },
+      },
+    });
+  }
+
+  function emptyNote(id, msg) {
+    const c = $(id);
+    if (!c) return;
+    const wrap = c.closest(".chart-wrap, .chart-wrap-lg") || c.parentElement;
+    wrap.innerHTML = `<div class="flex h-full items-center justify-center text-sm text-slate-600">${msg || "No data for this scan"}</div>`;
+  }
+
+  // --- Aggregation helpers ------------------------------------------------
+  function bucketStatuses(pages) {
+    const b = {};
+    pages.forEach((p) => {
+      const s = p.status || 0;
+      let key;
+      if (s >= 200 && s < 300) key = "2xx OK";
+      else if (s >= 300 && s < 400) key = "3xx Redirect";
+      else if (s >= 400 && s < 500) key = "4xx Client";
+      else if (s >= 500) key = "5xx Server";
+      else key = "No response";
+      b[key] = (b[key] || 0) + 1;
+    });
+    return b;
+  }
+  function statusColor(label) {
+    if (label.startsWith("2")) return "#34d399";
+    if (label.startsWith("3")) return "#38bdf8";
+    if (label.startsWith("4")) return "#f59e0b";
+    if (label.startsWith("5")) return "#f43f5e";
+    return "#64748b";
+  }
+  function shortUrl(u) {
+    try { const p = new URL(u); return (p.pathname === "/" ? p.host : p.pathname).slice(0, 42); }
+    catch (_) { return (u || "").slice(0, 42); }
+  }
+
+  // --- Category ranking table --------------------------------------------
+  const GRADE_COLOR = { A: "#34d399", B: "#a3e635", C: "#facc15", D: "#fb923c", F: "#f43f5e" };
+  function renderRankTable(ranks) {
+    const body = $("rank-body");
+    body.innerHTML = "";
+    if (!ranks.length) {
+      const tr = document.createElement("tr");
+      const td = document.createElement("td");
+      td.colSpan = 8; td.className = "px-5 py-10 text-center text-slate-600";
+      td.textContent = "No findings — this site looks clean.";
+      tr.appendChild(td); body.appendChild(tr);
+      return;
+    }
+    ranks.forEach((r) => {
+      const tr = document.createElement("tr");
+      tr.className = "hover:bg-slate-800/40 transition";
+      const gradeColor = GRADE_COLOR[r.grade] || "#94a3b8";
+      const cell = (txt, cls) => { const td = document.createElement("td"); td.className = "px-5 py-3 " + (cls || ""); td.textContent = txt; return td; };
+
+      tr.appendChild(cell("#" + r.rank, "text-slate-500"));
+
+      const catTd = document.createElement("td");
+      catTd.className = "px-5 py-3";
+      const dot = document.createElement("span");
+      dot.className = "inline-block h-2.5 w-2.5 rounded-full mr-2 align-middle";
+      dot.style.backgroundColor = catColor(r.category);
+      const name = document.createElement("span");
+      name.className = "text-slate-200 font-medium align-middle";
+      name.textContent = r.category;
+      catTd.append(dot, name);
+      tr.appendChild(catTd);
+
+      const gradeTd = document.createElement("td");
+      gradeTd.className = "px-5 py-3";
+      const badge = document.createElement("span");
+      badge.className = "inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-bold";
+      badge.style.color = gradeColor;
+      badge.style.backgroundColor = hexA(gradeColor, 0.15);
+      badge.textContent = r.grade + " · " + r.label;
+      gradeTd.appendChild(badge);
+      tr.appendChild(gradeTd);
+
+      tr.appendChild(cell(r.critical, "text-right text-rose-300"));
+      tr.appendChild(cell(r.warning, "text-right text-amber-300"));
+      tr.appendChild(cell(r.info, "text-right text-sky-300"));
+      tr.appendChild(cell(r.count, "text-right text-white font-semibold"));
+      tr.appendChild(cell(r.density, "text-right text-slate-400"));
+      body.appendChild(tr);
+    });
+  }
+
+  // --- Status badge -------------------------------------------------------
+  function setStatusBadge(status) {
+    const map = {
+      pending:   ["bg-slate-700 text-slate-200", "bg-slate-300", "Pending"],
+      running:   ["bg-brand-600/20 text-brand-300", "bg-brand-400 animate-pulse", "In progress"],
+      completed: ["bg-emerald-600/20 text-emerald-300", "bg-emerald-400", "Completed"],
+      failed:    ["bg-rose-600/20 text-rose-300", "bg-rose-400", "Failed"],
+      cancelled: ["bg-slate-700 text-slate-300", "bg-slate-400", "Cancelled"],
+    };
+    const [badgeCls, dotCls, text] = map[status] || map.completed;
+    $("status-badge").className = "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold " + badgeCls;
+    $("status-dot").className = "h-1.5 w-1.5 rounded-full " + dotCls;
+    $("status-text").textContent = text;
+  }
+})();
+</script>
+{% endblock %}

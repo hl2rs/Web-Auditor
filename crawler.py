@@ -54,6 +54,10 @@ from analyzers import (
 # Schemes / prefixes that are never crawled or link-checked.
 _SKIP_PREFIXES = ("#", "mailto:", "tel:", "javascript:", "data:", "blob:", "ftp:", "sms:")
 
+# Sentinel link status: the host kept rate-limiting us (HTTP 429), so the link
+# could not be verified. Treated as *inconclusive*, never as a broken link.
+RATE_LIMITED = -2
+
 # In-page script (run via ``page.evaluate``) that measures interactive controls
 # and returns those smaller than the WCAG 2.2 SC 2.5.8 minimum of 24x24 CSS px.
 # Inline links flowing inside surrounding text are exempt under the SC and are
@@ -105,11 +109,18 @@ class CrawlConfig:
     page_timeout_ms: int = 25_000      # navigation timeout per page
     settle_ms: int = 2_500             # extra wait for late JS / network-idle
     link_timeout_s: float = 12.0       # per-request timeout for link checks
-    link_concurrency: int = 12         # simultaneous link checks
+    # Politeness controls - kept deliberately gentle so the auditor never trips a
+    # target's rate limiter (HTTP 429). ``request_delay_s`` is the *minimum* gap
+    # enforced between two requests to the same host; it widens automatically if
+    # a host signals rate-limiting (see :class:`_HostThrottle`).
+    link_concurrency: int = 6          # max simultaneous link checks (all hosts)
+    per_host_concurrency: int = 2      # max simultaneous requests to one host
+    request_delay_s: float = 0.4       # min delay between requests to one host
+    max_retries: int = 3               # 429/503 back-off retries before giving up
     max_redirects: int = 10            # redirect cap before flagging a loop
     max_links_check: int = 750         # safety cap on number of links verified
     user_agent: str = (
-        "Mozilla/5.0 (compatible; SiteAuditorBot/1.0; +https://example.local/bot)"
+        "Mozilla/5.0 (compatible; AuditorBot/1.0)"
     )
 
 
@@ -148,10 +159,83 @@ class LinkCheckResult:
     """Result of verifying a single hyperlink."""
 
     url: str
-    status: int = 0                 # 0 == connection failed, -1 == redirect loop
+    status: int = 0                 # 0 == failed, -1 == loop, -2 == rate-limited
     error: str = ""
     is_loop: bool = False
     redirect_chain: List[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Politeness / rate-limit avoidance
+# ---------------------------------------------------------------------------
+def _parse_retry_after(value: Optional[str]) -> float:
+    """Interpret a ``Retry-After`` header (delta-seconds or HTTP-date) as seconds."""
+    if not value:
+        return 0.0
+    value = value.strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        from datetime import datetime, timezone
+        from email.utils import parsedate_to_datetime
+        when = parsedate_to_datetime(value)
+        if when is not None:
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            return max(0.0, (when - datetime.now(timezone.utc)).total_seconds())
+    except Exception:
+        pass
+    return 0.0
+
+
+class _HostThrottle:
+    """Per-host politeness that keeps the crawler safely under rate limits.
+
+    * :meth:`wait` enforces a minimum interval between successive requests to a
+      host, spacing even concurrent callers onto distinct time-slots.
+    * :meth:`penalize` widens that interval for a host that signalled
+      rate-limiting (429/503), so the crawler slows down automatically.
+    * :meth:`backoff` returns how long to sleep before retrying a throttled
+      request, honouring any ``Retry-After`` the server supplied.
+    """
+
+    def __init__(self, min_interval: float) -> None:
+        self._min = max(0.0, float(min_interval))
+        self._next: Dict[str, float] = {}
+        self._extra: Dict[str, float] = {}
+        self._lock: Optional[asyncio.Lock] = None
+
+    @staticmethod
+    def _host(url: str) -> str:
+        return urlparse(url).netloc.lower()
+
+    async def wait(self, url: str) -> None:
+        """Block until another request to ``url``'s host is permitted."""
+        if self._min <= 0 and not self._extra:
+            return
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        host = self._host(url)
+        async with self._lock:
+            now = time.monotonic()
+            gap = self._min + self._extra.get(host, 0.0)
+            start = max(now, self._next.get(host, 0.0))
+            self._next[host] = start + gap
+        delay = start - time.monotonic()
+        if delay > 0:
+            await asyncio.sleep(delay)
+
+    def penalize(self, url: str, retry_after: float = 0.0) -> None:
+        """Widen a host's spacing after it signalled rate-limiting."""
+        host = self._host(url)
+        current = self._extra.get(host, 0.0)
+        widened = max(retry_after, (current * 2 + 0.5) if current else 1.0)
+        self._extra[host] = min(widened, 15.0)
+
+    def backoff(self, url: str, attempt: int, retry_after: float = 0.0) -> float:
+        """Seconds to sleep before retry ``attempt`` of a throttled request."""
+        base = self._min + self._extra.get(self._host(url), 0.0)
+        return min(20.0, max(retry_after, base, 0.5) * (2 ** attempt))
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +298,10 @@ class SiteCrawler:
             if key in ANALYZER_REGISTRY
         ]
         self.check_links_enabled = "links" in config.modules
+
+        # Shared per-host politeness throttle - keeps page loads *and* link
+        # checks spaced out so we never trip a target's rate limiter.
+        self._throttle = _HostThrottle(self.config.request_delay_s)
 
         # Runtime state -----------------------------------------------------
         self.pages_scanned = 0
@@ -360,6 +448,10 @@ class SiteCrawler:
                 await context.clear_cookies()
             except PlaywrightError:
                 pass
+
+            # Politeness: keep a minimum gap between hits to the same host so a
+            # fast sequence of page renders cannot trip its rate limiter.
+            await self._throttle.wait(url)
 
             try:
                 response = await page.goto(
@@ -520,8 +612,14 @@ class SiteCrawler:
 
         timeout = aiohttp.ClientTimeout(total=self.config.link_timeout_s)
         # ``ssl=False`` lets us probe hosts with invalid/self-signed certs so a
-        # bad certificate does not masquerade as a dead link.
-        connector = aiohttp.TCPConnector(limit=self.config.link_concurrency, ssl=False)
+        # bad certificate does not masquerade as a dead link. ``limit_per_host``
+        # caps simultaneous connections to any single origin as a hard backstop
+        # against overwhelming it (the throttle adds the time-based spacing).
+        connector = aiohttp.TCPConnector(
+            limit=self.config.link_concurrency,
+            limit_per_host=self.config.per_host_concurrency,
+            ssl=False,
+        )
         semaphore = asyncio.Semaphore(self.config.link_concurrency)
 
         async with aiohttp.ClientSession(
@@ -547,36 +645,65 @@ class SiteCrawler:
                         task.cancel()
 
     async def _check_one(self, session, semaphore, url: str) -> LinkCheckResult:
-        """HEAD (then GET fallback) a single URL, classifying the result."""
+        """HEAD (then GET fallback) a single URL, classifying the result.
+
+        Polite by construction: a per-host minimum interval is enforced before
+        every request, and ``429``/``503`` responses trigger an adaptive back-off
+        and retry instead of being mis-reported as broken links.
+        """
         async with semaphore:
-            # Try a cheap HEAD first; many servers reject it, so fall back to GET.
-            for method in ("head", "get"):
-                try:
-                    request = getattr(session, method)
-                    async with request(
-                        url,
-                        allow_redirects=True,
-                        max_redirects=self.config.max_redirects,
-                    ) as resp:
-                        chain = [str(h.url) for h in resp.history]
-                        # A repeated URL in the redirect chain is a loop.
-                        if len(chain) != len(set(chain)):
-                            return LinkCheckResult(url, -1, is_loop=True, redirect_chain=chain)
-                        if method == "head" and resp.status >= 400:
-                            break  # retry with GET before trusting a 4xx/5xx.
-                        return LinkCheckResult(url, resp.status, redirect_chain=chain)
-                except aiohttp.TooManyRedirects:
-                    return LinkCheckResult(url, -1, is_loop=True)
-                except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-                    if method == "get":
-                        return LinkCheckResult(url, 0, error=_clean_pw_error(str(exc)) or "connection failed")
-                    # otherwise fall through and retry with GET
-                except Exception as exc:  # noqa: BLE001 - defensive catch-all
-                    if method == "get":
-                        return LinkCheckResult(url, 0, error=str(exc))
-        return LinkCheckResult(url, 0, error="connection failed")
+            last = LinkCheckResult(url, 0, error="connection failed")
+            for attempt in range(self.config.max_retries + 1):
+                await self._throttle.wait(url)
+                transient = False
+                retry_after = 0.0
+                # Try a cheap HEAD first; many servers reject it, so fall back to GET.
+                for method in ("head", "get"):
+                    try:
+                        request = getattr(session, method)
+                        async with request(
+                            url,
+                            allow_redirects=True,
+                            max_redirects=self.config.max_redirects,
+                        ) as resp:
+                            chain = [str(h.url) for h in resp.history]
+                            # A repeated URL in the redirect chain is a loop.
+                            if len(chain) != len(set(chain)):
+                                return LinkCheckResult(url, -1, is_loop=True, redirect_chain=chain)
+                            # Rate-limited: this is not the link's real status -
+                            # slow the host down and retry the whole request below.
+                            if resp.status in (429, 503):
+                                transient = True
+                                retry_after = _parse_retry_after(resp.headers.get("Retry-After"))
+                                break
+                            if method == "head" and resp.status >= 400:
+                                continue  # retry with GET before trusting a 4xx/5xx.
+                            return LinkCheckResult(url, resp.status, redirect_chain=chain)
+                    except aiohttp.TooManyRedirects:
+                        return LinkCheckResult(url, -1, is_loop=True)
+                    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                        if method == "get":
+                            last = LinkCheckResult(url, 0, error=_clean_pw_error(str(exc)) or "connection failed")
+                    except Exception as exc:  # noqa: BLE001 - defensive catch-all
+                        if method == "get":
+                            last = LinkCheckResult(url, 0, error=str(exc))
+
+                if not transient:
+                    return last
+                # Being rate-limited: widen this host's spacing, then back off.
+                self._throttle.penalize(url, retry_after)
+                if attempt < self.config.max_retries:
+                    await asyncio.sleep(self._throttle.backoff(url, attempt, retry_after))
+                    continue
+                # Out of retries: report as inconclusive, never as a dead link.
+                return LinkCheckResult(url, RATE_LIMITED)
+            return last
 
     def _handle_link_result(self, res: LinkCheckResult) -> None:
+        # A link we could not verify because the host kept rate-limiting us is
+        # inconclusive, not broken - skip it rather than raising a false defect.
+        if res.status == RATE_LIMITED:
+            return
         sources = self.discovered_links.get(res.url, set())
         source = next(iter(sources), res.url)
         ref = f"referenced from {len(sources)} page(s)" if sources else ""

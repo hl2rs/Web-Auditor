@@ -1,7 +1,7 @@
 """
 analyzers.py
 ============
-Modular audit checks for the Site Auditor.
+Modular audit checks for Auditor.
 
 Each analyzer is a small, self-contained class exposing an ``analyze(context)``
 method that receives an :class:`AnalyzerContext` for a single rendered page and

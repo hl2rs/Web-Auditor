@@ -134,7 +134,7 @@ def _sev_para(severity: str, styles) -> Paragraph:
 def _cover(report: dict, risk: dict, styles) -> List:
     story: List = [Spacer(1, 22 * mm)]
     story.append(Paragraph("Compliance Risk Audit", styles["title"]))
-    story.append(Paragraph("Web Scraper &amp; Digital Compliance Report", styles["subtitle"]))
+    story.append(Paragraph("Auditor &#183; Digital Compliance Report", styles["subtitle"]))
     story.append(Spacer(1, 10 * mm))
 
     # Risk band -------------------------------------------------------------
@@ -569,7 +569,7 @@ def _footer(canvas, doc) -> None:
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(COLOR_MUTED)
     canvas.drawString(15 * mm, 10 * mm,
-                      "SiteAuditor - automated compliance report (not legal advice)")
+                      "Auditor - automated compliance report (not legal advice)")
     canvas.drawRightString(195 * mm, 10 * mm, f"Page {doc.page}")
     canvas.restoreState()
 
@@ -588,7 +588,7 @@ def build_pdf_report(report: dict) -> bytes:
         leftMargin=15 * mm, rightMargin=15 * mm,
         topMargin=16 * mm, bottomMargin=16 * mm,
         title="Compliance Risk Audit",
-        author="SiteAuditor",
+        author="Auditor",
     )
 
     story: List = []

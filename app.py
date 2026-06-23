@@ -1,7 +1,7 @@
 """
 app.py
 ======
-Flask front-end and JSON API for the Web Scraper & Site Auditor.
+Flask front-end and JSON API for Auditor.
 
 Architecture
 ------------
@@ -405,6 +405,20 @@ def scan_report(scan_id: str):
     if job is None:
         abort(404)
     return render_template("dashboard.html", scan_id=scan_id, start_url=job.start_url)
+
+
+@app.route("/scan/<scan_id>/dashboard")
+def scan_dashboard(scan_id: str):
+    """Post-audit analytics dashboard: aggregate charts, graphs and breakdowns.
+
+    The page is data-driven: it fetches the full report from the export endpoint
+    and renders it client-side with Chart.js. It is most useful once a scan has
+    completed, but renders partial data for an in-progress scan as well.
+    """
+    job = scan_manager.get(scan_id)
+    if job is None:
+        abort(404)
+    return render_template("analytics.html", scan_id=scan_id, start_url=job.start_url)
 
 
 @app.route("/api/scan/<scan_id>/status")

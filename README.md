@@ -1,4 +1,4 @@
-# SiteAuditor — Web Scraper & Site Auditor
+# Auditor — Web Scraper & Site Auditor
 
 A full-stack web application that crawls a target website and performs a
 comprehensive audit of every page: **dead links, security, accessibility,

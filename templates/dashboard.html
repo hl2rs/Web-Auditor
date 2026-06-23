@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Compliance Report &middot; SiteAuditor{% endblock %}
+{% block title %}Compliance Report &middot; Auditor{% endblock %}
 
 {% block content %}
 <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6"
@@ -16,11 +16,16 @@
         </span>
         <span id="elapsed" class="text-xs text-slate-500"></span>
       </div>
-      <h1 class="mt-2 text-2xl font-bold text-white truncate">Compliance Risk Audit</h1>
+      <h1 class="mt-2 font-display text-2xl font-bold text-white truncate">Compliance Risk Audit</h1>
       <p id="target-url" class="text-sm text-slate-400 truncate">{{ start_url }}</p>
     </div>
 
     <div class="flex items-center gap-2 flex-shrink-0">
+      <a id="dashboard-btn" href="/scan/{{ scan_id }}/dashboard"
+         class="hidden inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-200 hover:bg-slate-800 hover:text-white transition">
+        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Dashboard
+      </a>
       <button id="cancel-btn"
               class="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-4 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -32,10 +37,39 @@
         JSON
       </a>
       <a id="pdf-btn" href="/api/scan/{{ scan_id }}/report.pdf"
-         class="inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 px-4 py-2.5 text-sm font-semibold text-white transition">
+         class="btn-primary inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition">
         <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
         PDF Report
       </a>
+    </div>
+  </div>
+
+  <!-- ===== Completion banner: link to the analytics dashboard ===== -->
+  <div id="done-banner"
+       class="hidden rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="inline-flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      </span>
+      <div>
+        <p class="font-semibold text-white">Audit complete</p>
+        <p class="text-sm text-slate-400">Explore the full breakdown &mdash; charts, graphs and category rankings.</p>
+      </div>
+    </div>
+    <a href="/scan/{{ scan_id }}/dashboard"
+       class="btn-primary inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-semibold transition flex-shrink-0">
+      Open Dashboard
+      <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+
+  <!-- ===== Live scan visualiser (Three.js) ===== -->
+  <div id="scan-hero" class="hidden relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/60" style="height:240px">
+    <canvas id="viz-hero" class="absolute inset-0 h-full w-full"></canvas>
+    <div class="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent"></div>
+    <div class="pointer-events-none absolute inset-0 flex flex-col justify-end p-5">
+      <p id="hero-phase" class="font-display text-lg sm:text-xl font-semibold text-white">Scanning…</p>
+      <p id="hero-sub" class="mt-0.5 text-xs text-slate-400">Crawling, rendering &amp; analysing pages in real time</p>
     </div>
   </div>
 
@@ -75,8 +109,10 @@
         </div>
         <span id="progress-pct" class="text-sm font-semibold text-brand-400">0%</span>
       </div>
-      <div class="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden">
-        <div id="progress-bar" class="h-full w-0 rounded-full bg-gradient-to-r from-brand-500 to-emerald-400 transition-all duration-500"></div>
+      <div id="progress-track" class="relative h-2.5 w-full rounded-full bg-slate-800 overflow-hidden">
+        <div id="progress-bar" class="absolute inset-y-0 left-0 w-0 rounded-full bg-gradient-to-r from-[#8e99a6] via-[#c3c9d1] to-[#eef2f7] transition-all duration-500 overflow-hidden">
+          <canvas id="viz-progress" class="absolute inset-y-0 left-0 h-full pointer-events-none transition-opacity duration-500"></canvas>
+        </div>
       </div>
       <p id="current-url" class="mt-3 text-xs text-slate-500 truncate font-mono"></p>
 
@@ -207,6 +243,265 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =====================================================================
+   ScanViz — Three.js visualiser that runs *while a scan is in progress*.
+   Three independent WebGL scenes, all silver-on-black to match the theme:
+     1. Hero "scan sphere": a rotating wireframe globe swept by a scan ring.
+     2. Progress bar: bright particles streaming through the filled portion.
+     3. Ambient: a slow drifting node-network behind the whole report.
+   Scenes are lazily created on start() and fully disposed on complete(),
+   and the whole thing is a no-op when WebGL / Three.js is unavailable or
+   the user prefers reduced motion.
+   ===================================================================== */
+window.ScanViz = (function () {
+  const prefersReduced = window.matchMedia &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (typeof THREE === "undefined" || prefersReduced) {
+    return { start() {}, complete() {}, setProgress() {}, setPhase() {} };
+  }
+
+  const SILVER = 0xc3c9d1, WHITE = 0xeef2f7, STEEL = 0x8a948e;
+  let started = false, running = false, rafId = null, onResize = null;
+  let ambientCanvas = null;
+  const scenes = [];
+
+  function makeRenderer(canvas) {
+    const r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, powerPreference: "low-power" });
+    r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    r.setClearColor(0x000000, 0);
+    return r;
+  }
+
+  // ---------- Scene 1: hero scan-sphere ----------
+  function initHero() {
+    const canvas = document.getElementById("viz-hero");
+    if (!canvas) return;
+    const rnd = makeRenderer(canvas);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 100);
+    camera.position.set(0, 0, 6.2);
+
+    const group = new THREE.Group();
+    scene.add(group);
+
+    const ico = new THREE.IcosahedronGeometry(2.05, 3);
+    const dots = new THREE.Points(ico, new THREE.PointsMaterial({ color: SILVER, size: 0.045, transparent: true, opacity: 0.95 }));
+    const wireGeo = new THREE.WireframeGeometry(ico);
+    const wire = new THREE.LineSegments(wireGeo, new THREE.LineBasicMaterial({ color: STEEL, transparent: true, opacity: 0.16 }));
+    group.add(dots, wire);
+
+    const ringGeo = new THREE.TorusGeometry(1, 0.012, 10, 96);
+    const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: WHITE, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending }));
+    ring.rotation.x = Math.PI / 2;
+    group.add(ring);
+
+    const N = 340;
+    const halo = new THREE.BufferGeometry();
+    const pos = new Float32Array(N * 3);
+    for (let i = 0; i < N; i++) {
+      const rr = 2.6 + Math.random() * 4.0;
+      const th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
+      pos[i * 3] = rr * Math.sin(ph) * Math.cos(th);
+      pos[i * 3 + 1] = rr * Math.sin(ph) * Math.sin(th);
+      pos[i * 3 + 2] = rr * Math.cos(ph);
+    }
+    halo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    const particles = new THREE.Points(halo, new THREE.PointsMaterial({ color: SILVER, size: 0.03, transparent: true, opacity: 0.5 }));
+    scene.add(particles);
+
+    const R = 2.06, t0 = performance.now();
+    function resize() {
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (!w || !h) return;
+      rnd.setSize(w, h, false);
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    function update(now) {
+      const t = (now - t0) / 1000;
+      group.rotation.y = t * 0.28;
+      group.rotation.x = Math.sin(t * 0.32) * 0.16;
+      const y = Math.sin(t * 0.9) * R;
+      ring.position.y = y;
+      const cr = Math.sqrt(Math.max(0.0004, R * R - y * y));
+      ring.scale.set(cr, cr, 1);
+      ring.material.opacity = 0.25 + 0.65 * (cr / R);
+      particles.rotation.y = -t * 0.06;
+      particles.rotation.x = t * 0.02;
+      rnd.render(scene, camera);
+    }
+    function dispose() {
+      ico.dispose(); wireGeo.dispose(); ringGeo.dispose(); halo.dispose();
+      dots.material.dispose(); wire.material.dispose(); ring.material.dispose(); particles.material.dispose();
+      rnd.dispose();
+    }
+    scenes.push({ update, resize, dispose });
+    resize();
+  }
+
+  // ---------- Scene 2: progress-bar particles ----------
+  function initProgress() {
+    const canvas = document.getElementById("viz-progress");
+    const track = document.getElementById("progress-track");
+    if (!canvas || !track) return;
+    const rnd = makeRenderer(canvas);
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(0, 1, 1, 0, -1, 1);
+    const N = 70;
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(N * 3);
+    const off = new Float32Array(N), spd = new Float32Array(N), ph = new Float32Array(N);
+    for (let i = 0; i < N; i++) { off[i] = Math.random(); spd[i] = 0.25 + Math.random() * 0.85; ph[i] = Math.random() * 12; }
+    geo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 3, sizeAttenuation: false, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending });
+    scene.add(new THREE.Points(geo, mat));
+    let W = 1, H = 1; const t0 = performance.now();
+    function resize() {
+      const w = track.clientWidth, h = track.clientHeight;
+      if (!w || !h) return;
+      W = w; H = h;
+      canvas.style.width = w + "px"; canvas.style.height = h + "px";
+      rnd.setSize(w, h, false);
+      camera.left = 0; camera.right = w; camera.top = h; camera.bottom = 0; camera.updateProjectionMatrix();
+      mat.size = Math.max(2, h * 0.85);
+    }
+    function update(now) {
+      const t = (now - t0) / 1000, a = geo.attributes.position.array;
+      for (let i = 0; i < N; i++) {
+        a[i * 3] = ((off[i] + t * spd[i] * 0.2) % 1) * W;
+        a[i * 3 + 1] = (0.5 + 0.32 * Math.sin(ph[i] + t * (1 + spd[i]) * 3)) * H;
+      }
+      geo.attributes.position.needsUpdate = true;
+      rnd.render(scene, camera);
+    }
+    function dispose() { geo.dispose(); mat.dispose(); rnd.dispose(); }
+    scenes.push({ update, resize, dispose });
+    resize();
+  }
+
+  // ---------- Scene 3: ambient drifting network ----------
+  function initAmbient() {
+    const canvas = document.createElement("canvas");
+    canvas.id = "viz-ambient";
+    canvas.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;z-index:-1;pointer-events:none;opacity:0;transition:opacity 1.2s ease;";
+    document.body.insertBefore(canvas, document.body.firstChild);
+    ambientCanvas = canvas;
+    const rnd = makeRenderer(canvas);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100);
+    camera.position.z = 14;
+
+    const N = 130;
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(N * 3);
+    const vel = [];
+    for (let i = 0; i < N; i++) {
+      arr[i * 3] = (Math.random() - 0.5) * 32;
+      arr[i * 3 + 1] = (Math.random() - 0.5) * 20;
+      arr[i * 3 + 2] = (Math.random() - 0.5) * 8;
+      vel.push([(Math.random() - 0.5) * 0.012, (Math.random() - 0.5) * 0.012]);
+    }
+    geo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+    const pmat = new THREE.PointsMaterial({ color: SILVER, size: 0.07, transparent: true, opacity: 0.75 });
+    const points = new THREE.Points(geo, pmat);
+    const lmat = new THREE.LineBasicMaterial({ color: STEEL, transparent: true, opacity: 0.12 });
+    const lines = new THREE.LineSegments(new THREE.BufferGeometry(), lmat);
+    scene.add(points, lines);
+
+    function rebuild() {
+      const p = geo.attributes.position.array, seg = [];
+      for (let i = 0; i < N; i++) for (let j = i + 1; j < N; j++) {
+        const dx = p[i*3]-p[j*3], dy = p[i*3+1]-p[j*3+1], dz = p[i*3+2]-p[j*3+2];
+        if (dx*dx + dy*dy + dz*dz < 9) seg.push(p[i*3], p[i*3+1], p[i*3+2], p[j*3], p[j*3+1], p[j*3+2]);
+      }
+      lines.geometry.dispose();
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(seg), 3));
+      lines.geometry = g;
+    }
+    let frame = 0; const t0 = performance.now();
+    function resize() {
+      const w = window.innerWidth, h = window.innerHeight;
+      rnd.setSize(w, h, false);
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    function update(now) {
+      const p = geo.attributes.position.array;
+      for (let i = 0; i < N; i++) {
+        p[i*3] += vel[i][0]; p[i*3+1] += vel[i][1];
+        if (p[i*3] > 16 || p[i*3] < -16) vel[i][0] *= -1;
+        if (p[i*3+1] > 10 || p[i*3+1] < -10) vel[i][1] *= -1;
+      }
+      geo.attributes.position.needsUpdate = true;
+      if ((frame++ % 12) === 0) rebuild();
+      points.rotation.y = lines.rotation.y = (now - t0) / 1000 * 0.02;
+      rnd.render(scene, camera);
+    }
+    function dispose() {
+      geo.dispose(); pmat.dispose(); lines.geometry.dispose(); lmat.dispose(); rnd.dispose();
+      if (ambientCanvas && ambientCanvas.parentNode) ambientCanvas.parentNode.removeChild(ambientCanvas);
+      ambientCanvas = null;
+    }
+    scenes.push({ update, resize, dispose });
+    resize();
+    requestAnimationFrame(() => { canvas.style.opacity = "0.4"; });
+  }
+
+  function loop(now) {
+    if (!running) return;
+    for (let i = 0; i < scenes.length; i++) scenes[i].update(now);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (started) return;
+    started = true; running = true;
+    const hero = document.getElementById("scan-hero");
+    if (hero) {
+      hero.classList.remove("hidden");
+      hero.style.transition = "opacity .6s ease";
+      hero.style.opacity = "0";
+      requestAnimationFrame(() => { hero.style.opacity = "1"; });
+    }
+    initHero(); initProgress(); initAmbient();
+    onResize = () => { for (let i = 0; i < scenes.length; i++) scenes[i].resize(); };
+    window.addEventListener("resize", onResize);
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function complete() {
+    const hero = document.getElementById("scan-hero");
+    if (!started) { if (hero) hero.classList.add("hidden"); return; }
+    if (!running) return;
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (onResize) window.removeEventListener("resize", onResize);
+    if (ambientCanvas) ambientCanvas.style.opacity = "0";
+    const prog = document.getElementById("viz-progress");
+    if (prog) prog.style.opacity = "0";
+    if (hero) {
+      hero.style.transition = "opacity .6s ease, height .6s ease, margin .6s ease, padding .6s ease, border-width .6s ease";
+      hero.style.opacity = "0"; hero.style.height = "0px";
+      hero.style.marginTop = "0"; hero.style.paddingTop = "0"; hero.style.paddingBottom = "0";
+      hero.style.borderWidth = "0";
+    }
+    setTimeout(() => {
+      for (let i = 0; i < scenes.length; i++) { try { scenes[i].dispose(); } catch (_) {} }
+      scenes.length = 0;
+      if (hero) hero.classList.add("hidden");
+    }, 700);
+  }
+
+  function setProgress() { /* reserved: fill reveal is handled by CSS clip */ }
+  function setPhase(text) {
+    const el = document.getElementById("hero-phase");
+    if (el && text) el.textContent = text;
+  }
+
+  return { start, complete, setProgress, setPhase };
+})();
+</script>
 <script>
 (() => {
   "use strict";
@@ -422,8 +717,7 @@
     const pct = computePercent(p);
     els.progressBar.style.width = pct + "%";
     els.progressPct.textContent = pct + "%";
-    els.phaseLabel.textContent = PHASES[p.phase] || PHASES[state.status] || "Working…";
-    els.currentUrl.textContent = p.current_url ? "→ " + p.current_url : "";
+    els.phaseLabel.textContent = PHASES[p.phase] || PHASES[state.status] || "Working…";    if (window.ScanViz) { ScanViz.setProgress(pct); ScanViz.setPhase(els.phaseLabel.textContent); }    els.currentUrl.textContent = p.current_url ? "→ " + p.current_url : "";
     els.statScanned.textContent = p.pages_scanned ?? 0;
     els.statQueued.textContent = p.queue_size ?? 0;
     els.statLinks.textContent = p.links_total ? `${p.links_checked ?? 0}/${p.links_total}` : (p.links_checked ?? 0);
@@ -442,6 +736,10 @@
       "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold " + badgeCls;
     els.statusDot.className = "h-1.5 w-1.5 rounded-full " + dotCls;
     els.statusText.textContent = text;
+    if (window.ScanViz) {
+      if (state.status === "running" || state.status === "pending") ScanViz.start();
+      else ScanViz.complete();
+    }
   }
 
   function setElapsed(seconds) {
@@ -461,6 +759,10 @@
       els.currentUrl.textContent = "Error: " + state.error;
     } else {
       els.currentUrl.textContent = "";
+    }
+    if (state.status === "completed") {
+      document.getElementById("done-banner")?.classList.remove("hidden");
+      document.getElementById("dashboard-btn")?.classList.remove("hidden");
     }
     scheduleRender();
   }

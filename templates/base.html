@@ -3,44 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{% block title %}Site Auditor{% endblock %}</title>
+  <title>{% block title %}Auditor{% endblock %}</title>
 
   <!-- Tailwind CSS via CDN (no build step required) -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    // Extend the default Tailwind theme with a small brand palette.
+    // App theme - a pure-black canvas with a brushed-silver gradient accent.
+    // The neutral (slate) and accent (brand) scales are re-mapped so every
+    // existing utility inherits the look.
     tailwind.config = {
       theme: {
         extend: {
           colors: {
+            slate: {
+              50:  "#f5f7f9", 100: "#eef2f7", 200: "#e6ece8", 300: "#c3c9d1",
+              400: "#9aa3a0", 500: "#8a948e", 600: "#6a726c", 700: "#2c323a",
+              800: "#1b1f25", 900: "#0b0d10", 950: "#000000",
+            },
             brand: {
-              50: "#eef2ff", 100: "#e0e7ff", 400: "#818cf8",
-              500: "#6366f1", 600: "#4f46e5", 700: "#4338ca",
+              50:  "#f5f7f9", 100: "#eef2f7", 300: "#d8dde2", 400: "#c3c9d1",
+              500: "#aab2bb", 600: "#c3c9d1", 700: "#8e99a6",
             },
           },
           fontFamily: {
-            sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
+            sans: ["Inter", "system-ui", "-apple-system", "sans-serif"],
+            display: ["Space Grotesk", "ui-sans-serif", "system-ui", "sans-serif"],
           },
         },
       },
     };
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap"
     rel="stylesheet"
   />
   <style>
-    /* Subtle animated gradient used on the hero/header. */
+    :root { --grad: linear-gradient(135deg, #8e99a6 0%, #c3c9d1 50%, #eef2f7 100%); }
+    /* Brushed-silver gradient used on hero text & word-marks. */
     .gradient-text {
-      background: linear-gradient(90deg, #818cf8, #34d399, #38bdf8);
+      background: var(--grad);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
     }
+    .font-display { font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif; }
+    /* Primary call-to-action: silver gradient pill with dark ink text. */
+    .btn-primary {
+      background-image: var(--grad);
+      color: #06080a;
+      border: 1px solid rgba(255, 255, 255, .14);
+      transition: filter .2s ease, box-shadow .2s ease, transform .2s ease;
+    }
+    .btn-primary:hover { filter: brightness(1.07); box-shadow: 0 10px 34px -12px rgba(195, 201, 209, .55); }
+    .btn-primary:active { transform: translateY(1px); }
+    .btn-primary:disabled { filter: grayscale(.4) brightness(.8); cursor: not-allowed; }
     /* Thin custom scrollbar for the issue stream. */
     .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
-    .scroll-thin::-webkit-scrollbar-thumb { background: #334155; border-radius: 9999px; }
+    .scroll-thin::-webkit-scrollbar-thumb { background: #2c323a; border-radius: 9999px; }
     .scroll-thin::-webkit-scrollbar-track { background: transparent; }
   </style>
   {% block head_extra %}{% endblock %}
@@ -49,16 +70,9 @@
   <!-- Top navigation -->
   <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-20">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-      <a href="{{ url_for('index') }}" class="flex items-center gap-2.5 group">
-        <span class="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600/20 ring-1 ring-brand-500/40 group-hover:bg-brand-600/30 transition">
-          <!-- radar / scan icon -->
-          <svg class="h-5 w-5 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="9" />
-            <path d="M12 12 21 6" />
-            <path d="M12 3a9 9 0 0 1 9 9" />
-          </svg>
-        </span>
-        <span class="text-lg font-bold tracking-tight">Site<span class="gradient-text">Auditor</span></span>
+      <a href="{{ url_for('index') }}" class="group inline-flex items-baseline gap-2">
+        <span class="font-display text-xl font-semibold tracking-tight text-white">Auditor</span>
+        <span class="hidden sm:inline text-[10px] font-medium uppercase tracking-[0.2em] text-slate-500">Compliance</span>
       </a>
       <nav class="flex items-center gap-1 text-sm">
         <a href="{{ url_for('index') }}"
@@ -81,7 +95,7 @@
         <h1 class="mt-4 text-2xl font-semibold text-white">Page not found</h1>
         <p class="mt-2 text-slate-400">The scan or page you are looking for does not exist.</p>
         <a href="{{ url_for('index') }}"
-           class="mt-8 inline-flex items-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 px-5 py-2.5 font-medium text-white transition">
+           class="btn-primary mt-8 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 font-medium transition">
           Start a new scan
         </a>
       </div>
@@ -93,7 +107,7 @@
   <!-- Footer -->
   <footer class="border-t border-slate-800/80 mt-12">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm text-slate-500">
-      <p>SiteAuditor &mdash; Flask &middot; Playwright &middot; BeautifulSoup</p>
+      <p><span class="font-display font-semibold text-slate-300">Auditor</span> &middot; Flask &middot; Playwright &middot; BeautifulSoup</p>
       <p class="text-slate-600">Scan only sites you are authorised to test.</p>
     </div>
   </footer>

@@ -1,11 +1,12 @@
 # ---------------------------------------------------------------------------
-# Web Scraper & Site Auditor - Python dependencies
+# Auditor - Python dependencies
 # ---------------------------------------------------------------------------
 # Core web framework
 Flask==3.0.3
 
 # Headless browser automation for JS rendering + console/network bug capture
-playwright==1.47.0
+# 1.48.0 pins greenlet==3.1.1, which ships prebuilt wheels for Python 3.13
+playwright==1.48.0
 
 # Fast HTML parsing
 beautifulsoup4==4.12.3

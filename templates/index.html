@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}New Scan &middot; SiteAuditor{% endblock %}
+{% block title %}New Scan &middot; Auditor{% endblock %}
 
 {% block content %}
 {#
@@ -7,13 +7,13 @@
   *key*; everything else here is purely for the UI.
 #}
 {% set module_meta = {
-  "links":         {"label": "Dead Links & Redirects", "desc": "Find 404s, unreachable hosts and redirect loops.", "accent": "text-rose-400"},
-  "security":      {"label": "Security Scanner",        "desc": "Headers, mixed content, secrets & staging URLs.",  "accent": "text-amber-400"},
-  "accessibility": {"label": "Accessibility (WCAG 2.2)","desc": "Alt text, landmarks, target size, link text.",     "accent": "text-emerald-400"},
-  "privacy":       {"label": "Privacy & Cookies",       "desc": "Pre-consent trackers, dark patterns, PII forms.",  "accent": "text-violet-400"},
-  "content":       {"label": "Content Integrity",       "desc": "Duplicate tags & cross-page contradictions.",      "accent": "text-sky-400"},
-  "seo":           {"label": "SEO Analysis",             "desc": "Canonical, viewport, robots, Open Graph & schema.", "accent": "text-teal-400"},
-  "bugs":          {"label": "Console & JS Bugs",       "desc": "Runtime exceptions and failed network calls.",     "accent": "text-fuchsia-400"}
+  "links":         {"label": "Dead Links & Redirects", "desc": "Find 404s, unreachable hosts and redirect loops.", "accent": "text-slate-100"},
+  "security":      {"label": "Security Scanner",        "desc": "Headers, mixed content, secrets & staging URLs.",  "accent": "text-slate-100"},
+  "accessibility": {"label": "Accessibility (WCAG 2.2)","desc": "Alt text, landmarks, target size, link text.",     "accent": "text-slate-100"},
+  "privacy":       {"label": "Privacy & Cookies",       "desc": "Pre-consent trackers, dark patterns, PII forms.",  "accent": "text-slate-100"},
+  "content":       {"label": "Content Integrity",       "desc": "Duplicate tags & cross-page contradictions.",      "accent": "text-slate-100"},
+  "seo":           {"label": "SEO Analysis",             "desc": "Canonical, viewport, robots, Open Graph & schema.", "accent": "text-slate-100"},
+  "bugs":          {"label": "Console & JS Bugs",       "desc": "Runtime exceptions and failed network calls.",     "accent": "text-slate-100"}
 } %}
 
 <section class="relative overflow-hidden">
@@ -27,7 +27,7 @@
       <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
       Headless crawler &middot; JS rendering enabled
     </span>
-    <h1 class="mt-5 text-4xl sm:text-5xl font-extrabold tracking-tight text-white">
+    <h1 class="mt-5 font-display text-4xl sm:text-5xl font-bold tracking-tight text-white">
       Audit your site for <span class="gradient-text">legal &amp; compliance risk</span>
     </h1>
     <p class="mt-4 text-slate-400 text-lg">
@@ -113,7 +113,7 @@
 
     <!-- Submit -->
     <button type="submit" id="submit-btn"
-            class="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-brand-600 hover:bg-brand-500 disabled:opacity-60 disabled:cursor-not-allowed px-5 py-3.5 font-semibold text-white shadow-lg shadow-brand-600/20 transition">
+            class="btn-primary w-full inline-flex items-center justify-center gap-2 rounded-xl disabled:opacity-60 disabled:cursor-not-allowed px-5 py-3.5 font-semibold transition">
       <svg id="submit-spinner" class="hidden h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
         <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
